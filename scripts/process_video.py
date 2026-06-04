@@ -3,9 +3,13 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 from pathlib import Path
 import sys
 import time
+
+os.environ.setdefault("YOLO_VERBOSE", "False")
+os.environ.setdefault("MPLBACKEND", "Agg")
 
 import cv2
 
@@ -38,7 +42,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--no-h264",
         action="store_true",
-        help="Skip H.264 output preference.",
+        help="Deprecated. H.264 is already skipped unless --h264 is used.",
+    )
+    parser.add_argument(
+        "--h264",
+        action="store_true",
+        help="Try H.264 output before falling back to mp4v.",
     )
     parser.add_argument("--debug", action="store_true")
     return parser.parse_args()
@@ -68,7 +77,7 @@ def main() -> int:
     width = int(capture.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
-    writer = _open_writer(args.output, fps, width, height, args.no_h264)
+    writer = _open_writer(args.output, fps, width, height, args.h264)
     browser_writer = None
     if args.browser_output:
         browser_writer = _open_writer(args.browser_output, fps, width, height, False)
@@ -96,8 +105,8 @@ def main() -> int:
     return 0
 
 
-def _open_writer(path: str, fps: float, width: int, height: int, no_h264: bool):
-    codes = ["mp4v"] if no_h264 else ["avc1", "H264", "mp4v"]
+def _open_writer(path: str, fps: float, width: int, height: int, prefer_h264: bool):
+    codes = ["avc1", "H264", "mp4v"] if prefer_h264 else ["mp4v"]
     for code in codes:
         writer = cv2.VideoWriter(
             path,

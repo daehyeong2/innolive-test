@@ -7,6 +7,8 @@ from typing import Any
 
 import numpy as np
 
+os.environ.setdefault("YOLO_VERBOSE", "False")
+
 from privacy_blur.errors import PrivacyFilterNotReadyError
 from .config import InternalConfig
 from .types import Detection

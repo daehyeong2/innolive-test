@@ -3,9 +3,13 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 from pathlib import Path
 import sys
 import time
+
+os.environ.setdefault("YOLO_VERBOSE", "False")
+os.environ.setdefault("MPLBACKEND", "Agg")
 
 import cv2
 
