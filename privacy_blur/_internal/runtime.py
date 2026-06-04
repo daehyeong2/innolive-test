@@ -169,7 +169,7 @@ def _resolve_asset_path(settings: Any) -> str:
     if env_path:
         return env_path
 
-    return "models/yolov8n-face.pt"
+    return "models/yolov12n-face.pt"
 
 
 def _django_asset_path() -> str | None:
