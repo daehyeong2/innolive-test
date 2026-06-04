@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>privacy_blur WebRTC test</title>
+    <style>
+      body {
+        margin: 0;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background: #101418;
+        color: #f4f7f9;
+      }
+
+      main {
+        max-width: 1120px;
+        margin: 0 auto;
+        padding: 24px;
+      }
+
+      .toolbar {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        margin-bottom: 16px;
+      }
+
+      button {
+        border: 0;
+        border-radius: 6px;
+        padding: 10px 14px;
+        background: #2f7dd3;
+        color: white;
+        font-weight: 600;
+        cursor: pointer;
+      }
+
+      button:disabled {
+        cursor: default;
+        opacity: 0.5;
+      }
+
+      .status {
+        color: #b8c4cf;
+        font-size: 14px;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 16px;
+      }
+
+      section {
+        min-width: 0;
+      }
+
+      h2 {
+        font-size: 15px;
+        font-weight: 650;
+        margin: 0 0 8px;
+      }
+
+      video {
+        width: 100%;
+        aspect-ratio: 16 / 9;
+        background: #050607;
+        border-radius: 6px;
+        object-fit: cover;
+      }
+
+      @media (max-width: 760px) {
+        .grid {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="toolbar">
+        <button id="start">Start</button>
+        <button id="stop" disabled>Stop</button>
+        <span class="status" id="status">Idle</span>
+      </div>
+
+      <div class="grid">
+        <section>
+          <h2>Local camera</h2>
+          <video id="local" autoplay playsinline muted></video>
+        </section>
+        <section>
+          <h2>Protected return track</h2>
+          <video id="remote" autoplay playsinline></video>
+        </section>
+      </div>
+    </main>
+
+    <script>
+      const startButton = document.getElementById("start");
+      const stopButton = document.getElementById("stop");
+      const statusText = document.getElementById("status");
+      const localVideo = document.getElementById("local");
+      const remoteVideo = document.getElementById("remote");
+
+      let pc = null;
+      let stream = null;
+
+      function setStatus(value) {
+        statusText.textContent = value;
+      }
+
+      async function start() {
+        startButton.disabled = true;
+        setStatus("Starting camera");
+
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { width: 640, height: 360, frameRate: 15 },
+          audio: false,
+        });
+        localVideo.srcObject = stream;
+
+        pc = new RTCPeerConnection();
+        pc.ontrack = (event) => {
+          remoteVideo.srcObject = event.streams[0];
+        };
+        pc.onconnectionstatechange = () => {
+          setStatus(pc.connectionState);
+        };
+
+        for (const track of stream.getVideoTracks()) {
+          pc.addTrack(track, stream);
+        }
+
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+
+        const response = await fetch("/offer", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(pc.localDescription),
+        });
+        const answer = await response.json();
+        await pc.setRemoteDescription(answer);
+
+        stopButton.disabled = false;
+      }
+
+      async function stop() {
+        stopButton.disabled = true;
+        startButton.disabled = false;
+        setStatus("Stopped");
+
+        if (pc) {
+          pc.close();
+          pc = null;
+        }
+        if (stream) {
+          for (const track of stream.getTracks()) {
+            track.stop();
+          }
+          stream = null;
+        }
+        localVideo.srcObject = null;
+        remoteVideo.srcObject = null;
+      }
+
+      startButton.addEventListener("click", () => {
+        start().catch((error) => {
+          console.error(error);
+          setStatus(error.message);
+          startButton.disabled = false;
+        });
+      });
+      stopButton.addEventListener("click", stop);
+    </script>
+  </body>
+</html>
