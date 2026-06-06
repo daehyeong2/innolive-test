@@ -1,4 +1,7 @@
-*.mp4
-*.png
-*.jpg
+.venv/
+__pycache__/
+*.py[cod]
 .DS_Store
+output*.mp4
+debug_*.jpg
+

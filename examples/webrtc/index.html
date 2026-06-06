@@ -1,178 +1,436 @@
 <!doctype html>
-<html lang="en">
+<html lang="ko">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>privacy_blur WebRTC test</title>
+    <title>Privacy Blur WebRTC Test</title>
     <style>
+      :root {
+        color-scheme: light;
+        --bg: #f6f7f9;
+        --panel: #ffffff;
+        --ink: #18202a;
+        --muted: #667181;
+        --line: #d9dee6;
+        --accent: #0f766e;
+        --accent-strong: #0b5f59;
+        --danger: #b42318;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
       body {
         margin: 0;
-        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-        background: #101418;
-        color: #f4f7f9;
+        min-height: 100vh;
+        background: var(--bg);
+        color: var(--ink);
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 18px 22px;
+        border-bottom: 1px solid var(--line);
+        background: var(--panel);
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 18px;
+        font-weight: 650;
       }
 
       main {
-        max-width: 1120px;
+        width: min(1400px, 100%);
         margin: 0 auto;
-        padding: 24px;
+        padding: 18px;
       }
 
       .toolbar {
         display: flex;
-        gap: 8px;
         align-items: center;
+        justify-content: space-between;
+        gap: 12px;
         margin-bottom: 16px;
       }
 
-      button {
-        border: 0;
+      .controls {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .file-control {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      input[type="file"] {
+        width: min(320px, 54vw);
+        color: var(--muted);
+        font: inherit;
+        font-size: 14px;
+      }
+
+      input[type="file"]::file-selector-button {
+        min-height: 38px;
+        margin-right: 10px;
+        border: 1px solid var(--line);
         border-radius: 6px;
-        padding: 10px 14px;
-        background: #2f7dd3;
-        color: white;
+        background: white;
+        color: var(--ink);
+        font: inherit;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+
+      button {
+        min-height: 38px;
+        border: 1px solid transparent;
+        border-radius: 6px;
+        padding: 0 14px;
+        font: inherit;
+        font-size: 14px;
         font-weight: 600;
         cursor: pointer;
       }
 
       button:disabled {
-        cursor: default;
-        opacity: 0.5;
+        cursor: not-allowed;
+        opacity: 0.55;
+      }
+
+      .primary {
+        background: var(--accent);
+        color: white;
+      }
+
+      .primary:hover:not(:disabled) {
+        background: var(--accent-strong);
+      }
+
+      .secondary {
+        background: white;
+        color: var(--ink);
+        border-color: var(--line);
       }
 
       .status {
-        color: #b8c4cf;
+        min-width: 180px;
+        color: var(--muted);
         font-size: 14px;
+        text-align: right;
       }
 
-      .grid {
+      .stage {
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 16px;
+        gap: 14px;
       }
 
-      section {
-        min-width: 0;
+      .viewer {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        overflow: hidden;
       }
 
-      h2 {
-        font-size: 15px;
+      .viewer header {
+        padding: 10px 12px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .viewer h2 {
+        margin: 0;
+        font-size: 14px;
         font-weight: 650;
-        margin: 0 0 8px;
       }
 
       video {
+        display: block;
         width: 100%;
         aspect-ratio: 16 / 9;
-        background: #050607;
-        border-radius: 6px;
-        object-fit: cover;
+        background: #101418;
+        object-fit: contain;
       }
 
-      @media (max-width: 760px) {
-        .grid {
+      @media (max-width: 820px) {
+        header,
+        .toolbar {
+          align-items: stretch;
+          flex-direction: column;
+        }
+
+        .status {
+          min-width: 0;
+          text-align: left;
+        }
+
+        .stage {
           grid-template-columns: 1fr;
         }
       }
     </style>
   </head>
   <body>
+    <header>
+      <h1>Privacy Blur WebRTC Test</h1>
+      <div id="status" class="status">Idle</div>
+    </header>
+
     <main>
       <div class="toolbar">
-        <button id="start">Start</button>
-        <button id="stop" disabled>Stop</button>
-        <span class="status" id="status">Idle</span>
+        <div class="controls">
+          <button id="start" class="primary" type="button">Start Camera</button>
+          <div class="file-control">
+            <input id="fileInput" type="file" accept="video/*" />
+            <button id="startFile" class="secondary" type="button" disabled>Start File</button>
+          </div>
+          <button id="stop" class="secondary" type="button" disabled>Stop</button>
+        </div>
       </div>
 
-      <div class="grid">
-        <section>
-          <h2>Local camera</h2>
-          <video id="local" autoplay playsinline muted></video>
-        </section>
-        <section>
-          <h2>Protected return track</h2>
-          <video id="remote" autoplay playsinline></video>
-        </section>
-      </div>
+      <section class="stage" aria-label="video preview">
+        <article class="viewer">
+          <header>
+            <h2>Local</h2>
+          </header>
+          <video id="localVideo" autoplay muted playsinline></video>
+        </article>
+
+        <article class="viewer">
+          <header>
+            <h2>Processed</h2>
+          </header>
+          <video id="remoteVideo" autoplay playsinline></video>
+        </article>
+      </section>
+
+      <video id="fileVideo" muted playsinline style="display: none"></video>
     </main>
 
     <script>
       const startButton = document.getElementById("start");
+      const startFileButton = document.getElementById("startFile");
       const stopButton = document.getElementById("stop");
+      const fileInput = document.getElementById("fileInput");
+      const fileVideo = document.getElementById("fileVideo");
       const statusText = document.getElementById("status");
-      const localVideo = document.getElementById("local");
-      const remoteVideo = document.getElementById("remote");
+      const localVideo = document.getElementById("localVideo");
+      const remoteVideo = document.getElementById("remoteVideo");
 
-      let pc = null;
-      let stream = null;
+      let peerConnection = null;
+      let localStream = null;
+      let remoteStream = null;
+      let fileUrl = null;
 
-      function setStatus(value) {
-        statusText.textContent = value;
+      function setStatus(message) {
+        statusText.textContent = message;
       }
 
-      async function start() {
-        startButton.disabled = true;
-        setStatus("Starting camera");
-
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: { width: 640, height: 360, frameRate: 15 },
-          audio: false,
-        });
-        localVideo.srcObject = stream;
-
-        pc = new RTCPeerConnection();
-        pc.ontrack = (event) => {
-          remoteVideo.srcObject = event.streams[0];
-        };
-        pc.onconnectionstatechange = () => {
-          setStatus(pc.connectionState);
-        };
-
-        for (const track of stream.getVideoTracks()) {
-          pc.addTrack(track, stream);
+      function waitForIceGatheringComplete(pc) {
+        if (pc.iceGatheringState === "complete") {
+          return Promise.resolve();
         }
 
-        const offer = await pc.createOffer();
-        await pc.setLocalDescription(offer);
+        return new Promise((resolve) => {
+          function checkState() {
+            if (pc.iceGatheringState === "complete") {
+              pc.removeEventListener("icegatheringstatechange", checkState);
+              resolve();
+            }
+          }
 
+          pc.addEventListener("icegatheringstatechange", checkState);
+        });
+      }
+
+      async function connectStream(stream, statusPrefix) {
+        localStream = stream;
+        localVideo.srcObject = localStream;
+
+        remoteStream = new MediaStream();
+        remoteVideo.srcObject = remoteStream;
+
+        peerConnection = new RTCPeerConnection();
+        peerConnection.addEventListener("track", (event) => {
+          remoteStream.addTrack(event.track);
+        });
+        peerConnection.addEventListener("connectionstatechange", () => {
+          setStatus(peerConnection.connectionState);
+        });
+
+        for (const track of localStream.getVideoTracks()) {
+          peerConnection.addTrack(track, localStream);
+        }
+
+        setStatus(`${statusPrefix}: offer`);
+        const offer = await peerConnection.createOffer();
+        await peerConnection.setLocalDescription(offer);
+        await waitForIceGatheringComplete(peerConnection);
+
+        setStatus(`${statusPrefix}: server`);
         const response = await fetch("/offer", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(pc.localDescription),
+          body: JSON.stringify(peerConnection.localDescription),
         });
-        const answer = await response.json();
-        await pc.setRemoteDescription(answer);
 
-        stopButton.disabled = false;
+        if (!response.ok) {
+          throw new Error(await response.text());
+        }
+
+        const answer = await response.json();
+        await peerConnection.setRemoteDescription(answer);
+        setStatus("Connected");
       }
 
-      async function stop() {
-        stopButton.disabled = true;
-        startButton.disabled = false;
-        setStatus("Stopped");
+      function setRunning(running) {
+        startButton.disabled = running;
+        startFileButton.disabled = running || !fileInput.files.length;
+        fileInput.disabled = running;
+        stopButton.disabled = !running;
+      }
 
-        if (pc) {
-          pc.close();
-          pc = null;
+      async function startCamera() {
+        startButton.disabled = true;
+        startFileButton.disabled = true;
+        fileInput.disabled = true;
+        stopButton.disabled = false;
+        setStatus("Opening camera");
+
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({
+            audio: false,
+            video: {
+              width: { ideal: 1280 },
+              height: { ideal: 720 },
+              frameRate: { ideal: 24, max: 30 },
+            },
+          });
+          await connectStream(stream, "Camera");
+        } catch (error) {
+          setStatus(error.message || "Failed");
+          stop();
         }
-        if (stream) {
-          for (const track of stream.getTracks()) {
+      }
+
+      function waitForVideoReady(video) {
+        if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+          return Promise.resolve();
+        }
+
+        return new Promise((resolve, reject) => {
+          const cleanup = () => {
+            video.removeEventListener("loadeddata", onLoaded);
+            video.removeEventListener("error", onError);
+          };
+          const onLoaded = () => {
+            cleanup();
+            resolve();
+          };
+          const onError = () => {
+            cleanup();
+            reject(new Error("Could not load selected video"));
+          };
+          video.addEventListener("loadeddata", onLoaded, { once: true });
+          video.addEventListener("error", onError, { once: true });
+        });
+      }
+
+      async function startFile() {
+        const file = fileInput.files[0];
+        if (!file) {
+          setStatus("Choose a video file");
+          return;
+        }
+
+        setRunning(true);
+        setStatus("Loading file");
+
+        try {
+          if (fileUrl) {
+            URL.revokeObjectURL(fileUrl);
+          }
+          fileUrl = URL.createObjectURL(file);
+          fileVideo.src = fileUrl;
+          fileVideo.loop = true;
+          fileVideo.muted = true;
+          localVideo.srcObject = null;
+          localVideo.src = fileUrl;
+          localVideo.loop = true;
+          localVideo.muted = true;
+
+          await waitForVideoReady(fileVideo);
+          await fileVideo.play();
+          await localVideo.play();
+
+          const stream =
+            fileVideo.captureStream?.() ||
+            fileVideo.mozCaptureStream?.();
+
+          if (!stream || !stream.getVideoTracks().length) {
+            throw new Error("This browser cannot stream the selected file");
+          }
+
+          await connectStream(stream, "File");
+        } catch (error) {
+          setStatus(error.message || "Failed");
+          stop();
+        }
+      }
+
+      function stop() {
+        if (peerConnection) {
+          peerConnection.close();
+          peerConnection = null;
+        }
+
+        if (localStream) {
+          for (const track of localStream.getTracks()) {
             track.stop();
           }
-          stream = null;
+          localStream = null;
         }
+
+        if (remoteStream) {
+          for (const track of remoteStream.getTracks()) {
+            track.stop();
+          }
+          remoteStream = null;
+        }
+
         localVideo.srcObject = null;
+        localVideo.removeAttribute("src");
+        localVideo.load();
         remoteVideo.srcObject = null;
+        fileVideo.pause();
+        fileVideo.removeAttribute("src");
+        fileVideo.load();
+        if (fileUrl) {
+          URL.revokeObjectURL(fileUrl);
+          fileUrl = null;
+        }
+        setRunning(false);
+        setStatus("Idle");
       }
 
-      startButton.addEventListener("click", () => {
-        start().catch((error) => {
-          console.error(error);
-          setStatus(error.message);
-          startButton.disabled = false;
-        });
-      });
+      startButton.addEventListener("click", startCamera);
+      startFileButton.addEventListener("click", startFile);
       stopButton.addEventListener("click", stop);
+      fileInput.addEventListener("change", () => {
+        startFileButton.disabled = !fileInput.files.length || Boolean(peerConnection);
+      });
+      window.addEventListener("beforeunload", stop);
     </script>
   </body>
 </html>

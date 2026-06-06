@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 from __future__ import annotations
 
 import argparse
@@ -9,113 +8,98 @@ from pathlib import Path
 import sys
 
 from aiohttp import web
-from aiortc import RTCPeerConnection, RTCSessionDescription
+from aiortc import RTCSessionDescription, RTCPeerConnection
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from privacy_blur import (  # noqa: E402
-    PrivacyFilterSettings,
-    get_privacy_filter,
-    protect_video_track,
-)
-
-logger = logging.getLogger("webrtc_example")
 ROOT = Path(__file__).resolve().parent
-pcs: set[RTCPeerConnection] = set()
+PROJECT_ROOT = ROOT.parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from privacy_blur import protect_video_track, register_reference_face
+
+LOGGER = logging.getLogger("privacy_blur.webrtc_test")
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Local WebRTC camera test for privacy_blur."
-    )
+    parser = argparse.ArgumentParser(description="Run a local WebRTC privacy blur test site.")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8080)
-    parser.add_argument(
-        "--profile",
-        choices=["privacy", "balanced", "fast"],
-        default="fast",
-    )
-    parser.add_argument("--asset", help="Privacy filter asset path.")
-    parser.add_argument(
-        "--accelerator",
-        choices=["auto", "cpu", "gpu"],
-        default="auto",
-    )
-    parser.add_argument("--debug", action="store_true")
+    parser.add_argument("--reference", default=str(PROJECT_ROOT / "me.jpeg"))
+    parser.add_argument("--face-imgsz", type=int, default=640)
+    parser.add_argument("--device", default=None)
     return parser.parse_args()
 
 
-async def index(request: web.Request) -> web.Response:
+async def index(_: web.Request) -> web.FileResponse:
     return web.FileResponse(ROOT / "index.html")
 
 
-async def offer(request: web.Request) -> web.Response:
-    params = await request.json()
-    offer_description = RTCSessionDescription(
-        sdp=params["sdp"],
-        type=params["type"],
-    )
-
-    pc = RTCPeerConnection()
-    pcs.add(pc)
-    privacy_filter = request.app["privacy_filter"]
-
-    @pc.on("connectionstatechange")
-    async def on_connectionstatechange():
-        logger.info("Connection state: %s", pc.connectionState)
-        if pc.connectionState in {"failed", "closed"}:
-            await pc.close()
-            pcs.discard(pc)
-
-    @pc.on("track")
-    def on_track(track):
-        logger.info("Received %s track.", track.kind)
-        if track.kind == "video":
-            pc.addTrack(protect_video_track(track, privacy_filter))
-
-    await pc.setRemoteDescription(offer_description)
-    answer = await pc.createAnswer()
-    await pc.setLocalDescription(answer)
-
-    return web.Response(
-        content_type="application/json",
-        text=json.dumps(
-            {
-                "sdp": pc.localDescription.sdp,
-                "type": pc.localDescription.type,
-            }
-        ),
-    )
-
-
-async def on_shutdown(app: web.Application) -> None:
-    await asyncio.gather(*(pc.close() for pc in pcs), return_exceptions=True)
-    pcs.clear()
-
-
-def main() -> int:
-    args = parse_args()
-    logging.basicConfig(
-        level=logging.DEBUG if args.debug else logging.INFO,
-        format="%(levelname)s %(name)s: %(message)s",
-    )
-
+def create_app(args: argparse.Namespace) -> web.Application:
+    register_reference_face(args.reference)
     app = web.Application()
-    app["privacy_filter"] = get_privacy_filter(
-        PrivacyFilterSettings(
-            profile=args.profile,
-            asset_path=args.asset,
-            accelerator=args.accelerator,
-            debug=args.debug,
+    app["pcs"] = set()
+
+    async def offer(request: web.Request) -> web.Response:
+        params = await request.json()
+        peer_connection = RTCPeerConnection()
+        app["pcs"].add(peer_connection)
+
+        @peer_connection.on("connectionstatechange")
+        async def on_connectionstatechange() -> None:
+            LOGGER.info("connection state: %s", peer_connection.connectionState)
+            if peer_connection.connectionState in {"failed", "closed", "disconnected"}:
+                await peer_connection.close()
+                app["pcs"].discard(peer_connection)
+
+        @peer_connection.on("track")
+        def on_track(track) -> None:
+            LOGGER.info("track received: %s", track.kind)
+            if track.kind == "video":
+                protected_track = protect_video_track(
+                    track,
+                    face_imgsz=args.face_imgsz,
+                    device=args.device,
+                )
+                peer_connection.addTrack(protected_track)
+
+        offer_description = RTCSessionDescription(sdp=params["sdp"], type=params["type"])
+        await peer_connection.setRemoteDescription(offer_description)
+
+        answer = await peer_connection.createAnswer()
+        await peer_connection.setLocalDescription(answer)
+
+        return web.Response(
+            content_type="application/json",
+            text=json.dumps(
+                {
+                    "sdp": peer_connection.localDescription.sdp,
+                    "type": peer_connection.localDescription.type,
+                }
+            ),
         )
-    )
+
+    async def health(_: web.Request) -> web.Response:
+        return web.json_response({"peers": len(app["pcs"])})
+
+    async def on_shutdown(application: web.Application) -> None:
+        coroutines = [pc.close() for pc in application["pcs"]]
+        if coroutines:
+            await asyncio.gather(*coroutines)
+        application["pcs"].clear()
+
     app.router.add_get("/", index)
+    app.router.add_get("/health", health)
     app.router.add_post("/offer", offer)
     app.on_shutdown.append(on_shutdown)
+    return app
 
-    web.run_app(app, host=args.host, port=args.port)
-    return 0
+
+def main() -> None:
+    logging.basicConfig(level=logging.INFO)
+    args = parse_args()
+    web.run_app(create_app(args), host=args.host, port=args.port)
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    main()
