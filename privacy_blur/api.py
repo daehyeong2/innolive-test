@@ -9,6 +9,7 @@ from .config import PrivacyBlurConfig
 
 if TYPE_CHECKING:
     from .core import FacePrivacyFilter
+    from .runtime import SharedGpuRuntime
 
 
 _default_config = PrivacyBlurConfig()
@@ -40,7 +41,33 @@ def get_default_config() -> PrivacyBlurConfig:
         return _default_config
 
 
-def new_filter(config: PrivacyBlurConfig | None = None, **overrides: Any) -> FacePrivacyFilter:
+def initialize_runtime(
+    config: PrivacyBlurConfig | None = None, **overrides: Any
+) -> SharedGpuRuntime:
+    """Load and warm the process-wide model runtime before accepting traffic."""
+    from .runtime import get_shared_runtime
+
+    base = config or get_default_config()
+    if overrides:
+        base = replace(base, **overrides)
+    return get_shared_runtime(base)
+
+
+def runtime_stats() -> list[dict[str, Any]]:
+    from .runtime import shared_runtime_stats
+
+    return shared_runtime_stats()
+
+
+def shutdown_runtimes() -> None:
+    from .runtime import shutdown_shared_runtimes
+
+    shutdown_shared_runtimes()
+
+
+def new_filter(
+    config: PrivacyBlurConfig | None = None, **overrides: Any
+) -> FacePrivacyFilter:
     from .core import create_filter
 
     base = config or get_default_config()

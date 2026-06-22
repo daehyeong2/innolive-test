@@ -3,13 +3,20 @@ from __future__ import annotations
 from .api import (
     configure,
     get_default_config,
+    initialize_runtime,
     new_filter,
     process_frame,
     protect_video_track,
     register_reference_face,
+    runtime_stats,
+    shutdown_runtimes,
 )
 from .config import PrivacyBlurConfig
-from .errors import PrivacyBlurError, PrivacyBlurNotReadyError, UnsupportedFrameTypeError
+from .errors import (
+    PrivacyBlurError,
+    PrivacyBlurNotReadyError,
+    UnsupportedFrameTypeError,
+)
 
 __all__ = [
     "FacePrivacyEngine",
@@ -20,10 +27,13 @@ __all__ = [
     "UnsupportedFrameTypeError",
     "configure",
     "get_default_config",
+    "initialize_runtime",
     "new_filter",
     "process_frame",
     "protect_video_track",
     "register_reference_face",
+    "runtime_stats",
+    "shutdown_runtimes",
 ]
 
 
